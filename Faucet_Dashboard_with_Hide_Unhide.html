@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Faucet Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Noto Sans Bengali", "Hind Siliguri", "system-ui", "sans-serif"] },
+          boxShadow: { soft: "0 10px 35px rgba(15,23,42,.08)" }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #f6f8fc; }
+    .glass { background: rgba(255,255,255,.82); backdrop-filter: blur(14px); }
+    .progress { transition: width .35s ease; }
+    .no-scrollbar::-webkit-scrollbar { display:none; }
+    .no-scrollbar { scrollbar-width:none; }
+  </style>
+</head>
+<body class="text-slate-800">
+  <header class="sticky top-0 z-30 border-b border-slate-200/70 glass">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
+      <div class="flex items-center gap-3">
+        <div class="grid h-11 w-11 place-items-center rounded-2xl bg-indigo-600 text-xl text-white shadow-soft">💰</div>
+        <div>
+          <h1 class="text-lg font-extrabold sm:text-xl">Faucet Dashboard</h1>
+          <p class="text-xs text-slate-500">দ্রুত দেখুন • Ready গুলো আগে • হিসাব অটো সেভ</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button id="exportBtn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold hover:bg-slate-50">⬇️ Backup</button>
+        <label class="cursor-pointer rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800">
+          ⬆️ Import
+          <input id="importInput" type="file" accept=".json,application/json" class="hidden">
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl space-y-5 px-4 py-5">
+    <section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div class="rounded-3xl bg-white p-4 shadow-soft">
+        <p class="text-xs font-semibold text-slate-500">আজকের আয়</p><p id="daily" class="mt-1 text-2xl font-black">0</p>
+      </div>
+      <div class="rounded-3xl bg-white p-4 shadow-soft">
+        <p class="text-xs font-semibold text-slate-500">এই সপ্তাহ</p><p id="weekly" class="mt-1 text-2xl font-black">0</p>
+      </div>
+      <div class="rounded-3xl bg-white p-4 shadow-soft">
+        <p class="text-xs font-semibold text-slate-500">এই মাস</p><p id="monthly" class="mt-1 text-2xl font-black">0</p>
+      </div>
+      <div class="rounded-3xl bg-white p-4 shadow-soft">
+        <p class="text-xs font-semibold text-slate-500">Ready Faucet</p><p id="readyCount" class="mt-1 text-2xl font-black">0</p>
+      </div>
+    </section>
+
+    <section class="rounded-3xl bg-white p-4 shadow-soft">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 class="text-base font-extrabold">আজকের Claim Queue</h2>
+          <p id="queueText" class="text-xs text-slate-500">Ready faucet আগে দেখানো হচ্ছে</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button data-filter="all" class="filterBtn rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white">সব</button>
+          <button data-filter="ready" class="filterBtn rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold">Ready</button>
+          <button data-filter="favorites" class="filterBtn rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold">⭐ Favorites</button>
+          <button data-filter="hidden" class="filterBtn rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold">🙈 Hidden</button>
+          <button id="claimAllBtn" class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">⚡ Claim All Ready</button>
+        </div>
+      </div>
+      <div class="mt-4 flex flex-col gap-3 md:flex-row">
+        <input id="search" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 outline-none focus:border-indigo-500" placeholder="Faucet খুঁজুন..." />
+        <select id="sort" class="rounded-xl border border-slate-200 px-4 py-2.5">
+          <option value="ready">Ready আগে</option><option value="reward">Reward বেশি</option><option value="name">নাম</option><option value="next">Next claim</option>
+        </select>
+      </div>
+      <div class="mt-3">
+        <p class="mb-2 text-xs font-bold text-slate-500">⏱️ সময় অনুযায়ী দ্রুত Filter</p>
+        <div id="intervalFilters" class="flex gap-2 overflow-x-auto pb-1 no-scrollbar"></div>
+      </div>
+    </section>
+
+    <section id="cards" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></section>
+
+    <section class="rounded-3xl bg-white p-4 shadow-soft">
+      <div class="flex items-center justify-between gap-3">
+        <div><h2 class="font-extrabold">Claim History</h2><p class="text-xs text-slate-500">সাম্প্রতিক 100টি claim রাখা হবে</p></div>
+        <button id="clearHistory" class="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold hover:bg-slate-200">Clear</button>
+      </div>
+      <div class="mt-3 overflow-x-auto">
+        <table class="w-full min-w-[600px] text-left text-sm">
+          <thead class="border-b text-xs text-slate-500"><tr><th class="p-2">সময়</th><th class="p-2">Faucet</th><th class="p-2">Reward</th></tr></thead>
+          <tbody id="history"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 translate-y-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white opacity-0 shadow-xl transition-all"></div>
+
+<script>
+const FAUCETS = [
+  // 0 minute
+  {
+    id: "btcadspace",
+    name: "BTCadspace",
+    coin: "USDT",
+    reward: 0.00005,
+    unit: "USDT",
+    interval: 10,
+    url: "https://btcadspace.com/faucet",
+    emoji: "💰"
+  },
+
+  // 1 minute
+  {
+    id: "herofaucet-mad",
+    name: "HeroFaucet Mad Faucet",
+    coin: "USDT",
+    reward: 0.0001,
+    unit: "USDT",
+    interval: 60,
+    url: "https://herofaucet.com/user/mad_faucet",
+    emoji: "🦸"
+  },
+
+  // 2 minutes
+  {
+    id: "adcoins",
+    name: "AdCoins Faucet",
+    coin: "USDT",
+    reward: 0.0001,
+    unit: "USDT",
+    interval: 60,
+    url: "https://adcoins.cc/faucet",
+    emoji: "🪙"
+  },
+  {
+    id: "bagi",
+    name: "Bagi Faucet",
+    coin: "USDT",
+    reward: 0.0002,
+    unit: "USDT",
+    interval: 120,
+    url: "https://bagi.co.in/claim_faucet.php",
+    emoji: "💎"
+  },
+
+  // 4 minutes
+  {
+    id: "viefaucet",
+    name: "VieFaucet",
+    coin: "USDT",
+    reward: 0.001,
+    unit: "USDT",
+    interval: 240,
+    url: "https://viefaucet.com/app/faucet",
+    emoji: "💧"
+  },
+  {
+    id: "faucetpayz",
+    name: "FaucetPayz",
+    coin: "USDT",
+    reward: 0.00006,
+    unit: "USDT",
+    interval: 10,
+    url: "https://faucetpayz.com/faucet",
+    emoji: "💵"
+  },
+  {
+    id: "claimtrx",
+    name: "ClaimTRX",
+    coin: "USDT",
+    reward: 0.0003,
+    unit: "USDT",
+    interval: 240,
+    url: "https://claimtrx.com/faucet",
+    emoji: "🔺"
+  },
+  {
+    id: "coinfalo",
+    name: "CoinFalo",
+    coin: "USDT",
+    reward: 0.0001,
+    unit: "USDT",
+    interval: 300,
+    url: "https://www.coinfalo.com/faucet",
+    emoji: "🪙"
+  },
+
+  // 5 minutes
+  {
+    id: "coinadster",
+    name: "CoinAdster",
+    coin: "USDT",
+    reward: 0.00055,
+    unit: "USDT",
+    interval: 300,
+    url: "https://coinadster.com/faucet.html",
+    emoji: "💰"
+  },
+  {
+    id: "tap-coin",
+    name: "Tap-Coin",
+    coin: "USDT",
+    reward: 0.0005,
+    unit: "USDT",
+    interval: 600,
+    url: "https://tap-coin.de/user/faucet",
+    emoji: "👆"
+  },
+  {
+    id: "aruble",
+    name: "Aruble",
+    coin: "USDT",
+    reward: 0.00035,
+    unit: "USDT",
+    interval: 300,
+    url: "https://aruble.net/faucet",
+    emoji: "💎"
+  },
+  {
+    id: "lightningminer",
+    name: "Lightning Miner",
+    coin: "USDT",
+    reward: 0,
+    unit: "USDT",
+    interval: 300,
+    url: "https://lightningminer.com/faucet",
+    emoji: "⚡"
+  },
+  {
+    id: "claimfreebits",
+    name: "ClaimFreeBits",
+    coin: "USDT",
+    reward: 0.0004,
+    unit: "USDT",
+    interval: 300,
+    url: "https://claimfreebits.com/?page=faucet",
+    emoji: "🪙"
+  },
+  {
+    id: "herofaucet-manual",
+    name: "HeroFaucet Manual",
+    coin: "USDT",
+    reward: 0.0005,
+    unit: "USDT",
+    interval: 300,
+    url: "https://herofaucet.com/user/manual_faucet",
+    emoji: "🦸"
+  },
+
+  // 7 minutes
+
+  // 8 minutes
+  {
+    id: "fundsreward",
+    name: "FundsReward",
+    coin: "USDT",
+    reward: 0.0005,
+    unit: "USDT",
+    interval: 480,
+    url: "https://fundsreward.com/faucet",
+    emoji: "🎁"
+  },
+
+  // 15 minutes
+  {
+    id: "coinpayufree",
+    name: "CoinPayU Free",
+    coin: "USDT",
+    reward: 0.0002,
+    unit: "USDT",
+    interval: 900,
+    url: "https://coinpayufree.com/wheel",
+    emoji: "🎡"
+  },
+
+  // 30 minutes
+  {
+    id: "larvelfaucet",
+    name: "Larvel Faucet",
+    coin: "USDT",
+    reward: 0.0004,
+    unit: "USDT",
+    interval: 1800,
+    url: "https://larvelfaucet.com/faucet",
+    emoji: "🪙"
+  },
+
+  // 1 hour
+  {
+    id: "earnfreecoin",
+    name: "EarnFreeCoin",
+    coin: "USDT",
+    reward: 0.001,
+    unit: "USDT",
+    interval: 3600,
+    url: "https://earnfreecoin.com/earn/faucet",
+    emoji: "💰"
+  },
+  {
+    id: "bitclickz",
+    name: "BitClickz",
+    coin: "USDT",
+    reward: 0,
+    unit: "USDT",
+    interval: 3600,
+    url: "https://bitclickz.com/faucet",
+    emoji: "₿"
+  }
+];
+
+const KEY = "mama-faucet-v1";
+let selectedInterval = "all";
+let state = JSON.parse(localStorage.getItem(KEY) || "null") || {
+  lastClaim: Object.fromEntries(FAUCETS.map(f => [f.id, 0])),
+  favorites: [],
+  history: [],
+  hidden: []
+};
+
+state.hidden = state.hidden || [];
+
+const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+const now = () => Date.now();
+const faucetById = id => FAUCETS.find(f => f.id === id);
+const ready = f => now() - (state.lastClaim[f.id] || 0) >= f.interval * 1000;
+const fmtReward = f => `${f.reward} ${f.unit}`;
+const fmtInterval = seconds => {
+  const m = Math.round(seconds / 60);
+  if (m === 0) return "0 মিনিট";
+  if (m < 60) return `${m} মিনিট`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? `${h} ঘণ্টা ${r} মিনিট` : `${h} ঘণ্টা`;
+};
+const fmtTime = ms => {
+  const s = Math.max(0, Math.ceil(ms/1000)), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  return h ? `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}` : `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+};
+const dayStart = d => { const x=new Date(d); x.setHours(0,0,0,0); return x.getTime(); };
+const weekStart = d => { const x=new Date(d); x.setHours(0,0,0,0); const day=x.getDay(); x.setDate(x.getDate()-(day===0?6:day-1)); return x.getTime(); };
+const monthStart = d => { const x=new Date(d); x.setHours(0,0,0,0); x.setDate(1); return x.getTime(); };
+const earnedSince = t => state.history.filter(x => x.time >= t).reduce((a,x)=>a+x.reward,0);
+
+function renderStats(){
+  document.getElementById("daily").textContent = earnedSince(dayStart(now()));
+  document.getElementById("weekly").textContent = earnedSince(weekStart(now()));
+  document.getElementById("monthly").textContent = earnedSince(monthStart(now()));
+  document.getElementById("readyCount").textContent = FAUCETS.filter(f => !state.hidden.includes(f.id) && ready(f)).length;
+}
+function claim(id){
+  const f=faucetById(id); if(!f || !ready(f)) return;
+  state.lastClaim[id]=now();
+  state.history.unshift({id, time:now(), reward:f.reward, unit:f.unit, coin:f.coin});
+  state.history=state.history.slice(0,100);
+  save(); render();
+  showToast(`✅ ${f.name} claimed: ${fmtReward(f)}`);
+  // This opens the faucet manually; no CAPTCHA bypass or automatic website interaction.
+  window.open(f.url, "_blank", "noopener,noreferrer");
+}
+function toggleFav(id){
+  state.favorites = state.favorites.includes(id) ? state.favorites.filter(x=>x!==id) : [...state.favorites,id];
+  save(); render();
+}
+
+function toggleHidden(id){
+  state.hidden = state.hidden.includes(id) ? state.hidden.filter(x=>x!==id) : [...state.hidden,id];
+  save(); render();
+}
+function renderIntervalFilters(){
+  const box=document.getElementById("intervalFilters");
+  const intervals=[0,1,2,4,5,7,8,15,30,60];
+  box.innerHTML = [
+    `<button data-min="all" class="intervalBtn whitespace-nowrap rounded-xl px-3 py-2 text-xs font-extrabold ${selectedInterval==="all"?"bg-indigo-600 text-white":"bg-slate-100"}">সব সময়</button>`,
+    ...intervals.map(m => `<button data-min="${m}" class="intervalBtn whitespace-nowrap rounded-xl px-3 py-2 text-xs font-extrabold ${String(selectedInterval)===String(m)?"bg-indigo-600 text-white":"bg-slate-100"}">${m===60?"1 ঘণ্টা":m+" মিনিট"}</button>`)
+  ].join("");
+  box.querySelectorAll(".intervalBtn").forEach(btn => btn.addEventListener("click", () => { selectedInterval=btn.dataset.min; render(); }));
+}
+function getFiltered(){
+  const q=document.getElementById("search").value.toLowerCase().trim();
+  const filter=document.querySelector(".filterBtn.bg-indigo-600")?.dataset.filter || "all";
+  let arr=FAUCETS.filter(f => (!q || (f.name+" "+f.coin).toLowerCase().includes(q)) &&
+    (filter==="hidden"
+      ? state.hidden.includes(f.id)
+      : !state.hidden.includes(f.id) &&
+        (filter==="all" || (filter==="ready" && ready(f)) || (filter==="favorites" && state.favorites.includes(f.id)))) &&
+    (selectedInterval==="all" || Math.round(f.interval/60)===Number(selectedInterval)));
+  const sort=document.getElementById("sort").value;
+  arr.sort((a,b)=>{
+    if(sort==="ready") return Number(ready(b))-Number(ready(a)) || b.reward-a.reward;
+    if(sort==="reward") return b.reward-a.reward;
+    if(sort==="name") return a.name.localeCompare(b.name);
+    return (state.lastClaim[a.id]+a.interval*1000)-(state.lastClaim[b.id]+b.interval*1000);
+  });
+  return arr;
+}
+function renderCards(){
+  const box=document.getElementById("cards"), arr=getFiltered();
+  box.innerHTML=arr.map(f=>{
+    const isReady=ready(f), last=state.lastClaim[f.id]||0, remaining=Math.max(0,last+f.interval*1000-now());
+    const pct=isReady?100:Math.min(100,Math.max(0,100-remaining/(f.interval*1000)*100));
+    const fav=state.favorites.includes(f.id);
+    return `<article class="rounded-3xl bg-white p-4 shadow-soft ring-1 ring-slate-100">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-2xl">${f.emoji}</div>
+          <div><h3 class="font-extrabold">${f.name}</h3><p class="text-xs text-slate-500">${f.coin} • প্রতি ${fmtInterval(f.interval)}</p></div>
+        </div>
+        <button onclick="toggleFav('${f.id}')" class="rounded-xl px-2 py-1 text-xl">${fav?"⭐":"☆"}</button>
+      </div>
+      <div class="mt-4 flex items-end justify-between"><div><p class="text-xs text-slate-500">Reward</p><p class="text-xl font-black">${fmtReward(f)}</p></div>
+        <span class="rounded-full px-3 py-1 text-xs font-black ${isReady?"bg-emerald-100 text-emerald-700":"bg-slate-100 text-slate-600"}">${isReady?"READY":"WAIT"}</span>
+      </div>
+      <div class="mt-4"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="progress h-full rounded-full ${isReady?"bg-emerald-500":"bg-indigo-500"}" style="width:${pct}%"></div></div>
+        <p class="mt-2 text-center text-xs font-bold text-slate-500">${isReady?"এখনই claim করা যাবে":"পরের claim: "+fmtTime(remaining)}</p></div>
+      <div class="mt-4 flex gap-2">
+        <button onclick="claim('${f.id}')" ${isReady?"":"disabled"} class="flex-1 rounded-xl px-3 py-2.5 text-sm font-extrabold ${isReady?"bg-indigo-600 text-white hover:bg-indigo-700":"cursor-not-allowed bg-slate-100 text-slate-400"}">${isReady?"⚡ Claim":"⏳ Waiting"}</button>
+        <a href="${f.url}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold hover:bg-slate-50">Open</a>
+        <button onclick="toggleHidden('${f.id}')" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold hover:bg-slate-50">${state.hidden.includes(f.id)?"👁️ Unhide":"🙈 Hide"}</button>
+      </div>
+    </article>`;
+  }).join("") || `<div class="col-span-full rounded-3xl bg-white p-8 text-center text-slate-500 shadow-soft">কোনো faucet পাওয়া যায়নি।</div>`;
+}
+function renderHistory(){
+  const body=document.getElementById("history");
+  body.innerHTML=state.history.slice(0,30).map(x=>{
+    const f=faucetById(x.id);
+    return `<tr class="border-b border-slate-100"><td class="p-2 text-xs text-slate-500">${new Date(x.time).toLocaleString("bn-BD")}</td><td class="p-2 font-bold">${f?.name||x.id}</td><td class="p-2">${x.reward} ${x.unit}</td></tr>`;
+  }).join("") || `<tr><td colspan="3" class="p-5 text-center text-slate-400">এখনও কোনো claim নেই।</td></tr>`;
+}
+function render(){
+  renderStats(); renderIntervalFilters(); renderCards(); renderHistory();
+  const r=FAUCETS.filter(f => !state.hidden.includes(f.id) && ready(f)).length;
+  document.getElementById("queueText").textContent = `${r}টি faucet এখন Ready — Ready গুলো আগে সাজানো আছে।`;
+}
+function showToast(t){
+  const el=document.getElementById("toast"); el.textContent=t; el.classList.remove("opacity-0","translate-y-3");
+  setTimeout(()=>el.classList.add("opacity-0","translate-y-3"),2200);
+}
+
+document.querySelectorAll(".filterBtn").forEach(btn=>btn.addEventListener("click",()=>{
+  document.querySelectorAll(".filterBtn").forEach(b=>b.className="filterBtn rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold");
+  btn.className="filterBtn rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white";
+  renderCards();
+}));
+document.getElementById("search").addEventListener("input",renderCards);
+document.getElementById("sort").addEventListener("change",renderCards);
+document.getElementById("claimAllBtn").addEventListener("click",()=>{
+  const ids=FAUCETS.filter(f => !state.hidden.includes(f.id) && ready(f)).map(f=>f.id);
+  if(!ids.length){ showToast("⏳ এখন কোনো faucet Ready নেই"); return; }
+  ids.forEach(id=>{ const f=faucetById(id); state.lastClaim[id]=now(); state.history.unshift({id,time:now(),reward:f.reward,unit:f.unit,coin:f.coin}); });
+  state.history=state.history.slice(0,100); save(); render();
+  showToast(`⚡ ${ids.length}টি Ready claim হিসাব সেভ হয়েছে`);
+  ids.forEach(id=>{ const f=faucetById(id); window.open(f.url,"_blank","noopener,noreferrer"); });
+});
+document.getElementById("clearHistory").addEventListener("click",()=>{
+  if(confirm("সব claim history মুছে ফেলবেন?")){ state.history=[]; save(); render(); }
+});
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="mama-faucet-backup.json"; a.click(); URL.revokeObjectURL(a.href);
+});
+document.getElementById("importInput").addEventListener("change",e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const r=new FileReader(); r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result); if(!data.state) throw new Error();
+      state={...state,...data.state, lastClaim:{...state.lastClaim,...data.state.lastClaim}};
+      save(); render(); showToast("✅ Backup imported");
+    }catch{ showToast("❌ Backup file ঠিক নয়"); }
+  }; r.readAsText(file);
+});
+setInterval(()=>{ renderStats(); renderCards(); },1000);
+render();
+</script>
+</body>
+</html>
